@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ViewTab, ThemeMode, Device, UserProfile } from './types';
 import { INITIAL_DEVICES } from './data/mockData';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 import { Sidebar } from './components/Sidebar';
 import { TopAppBar } from './components/TopAppBar';
@@ -58,18 +61,56 @@ export default function App() {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Sync user profile with server on mount
+  // Sync user profile with Firebase Auth & Firestore on mount
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.email) {
-          setUserProfile((prev) => ({ ...prev, ...data }));
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        try {
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserProfile((prev) => ({
+              ...prev,
+              name: firebaseUser.displayName || prev.name,
+              email: firebaseUser.email || prev.email,
+              avatar: firebaseUser.photoURL || prev.avatar,
+              isLoggedIn: true,
+              ...data,
+            }));
+          } else {
+            const newProfile = {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || 'Google User',
+              email: firebaseUser.email || '',
+              avatar: firebaseUser.photoURL || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBTtoQ4n9J10zKEo3WC2ZJVPrPB7tmep72XVG2GepMeywhdEigQ0XaUqQYTdUS3XYHFyz6EOdKETIG2Y7-fWxi1mBU-G8eMgChvsRR6imVX6i1X2rV6EkG8uWBe1PDT4VH1l4wnGFYMqhF_kIGkS5g0JUCigG9XfVcqoXdRaaxnF879u0eqPZHFS_vr8ffuRAWjdiZskg1oLbdwWu4ao64L4aZxgHmxgXmQ0-E7gAmGqrVZSd5wcqPn',
+              isLoggedIn: true,
+              googleAccountType: 'Verified Google Account',
+              connectedDrive: true,
+              quotaUsedGb: 4.2,
+              quotaTotalGb: 100,
+              joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+              organization: 'MindSparQ Security Labs',
+            };
+            await setDoc(userDocRef, newProfile);
+            setUserProfile((prev) => ({ ...prev, ...newProfile }));
+          }
+        } catch (err) {
+          handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
         }
-      })
-      .catch(() => {
-        // Fallback to local state if server endpoint is loading
-      });
+      } else {
+        // Fallback to server endpoint or local profile
+        fetch('/api/auth/me')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && data.email) {
+              setUserProfile((prev) => ({ ...prev, ...data }));
+            }
+          })
+          .catch(() => {});
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // Keyboard shortcut listener for Ctrl+K / Cmd+K and Ctrl+B / Cmd+B
@@ -111,6 +152,11 @@ export default function App() {
 
   const handleUpdateProfile = (updated: Partial<UserProfile>) => {
     setUserProfile((prev) => ({ ...prev, ...updated }));
+    if (auth.currentUser) {
+      setDoc(doc(db, 'users', auth.currentUser.uid), updated, { merge: true }).catch((err) => {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser?.uid}`);
+      });
+    }
     fetch('/api/auth/update-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

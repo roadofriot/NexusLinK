@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
+import { signInWithPopup, signOut } from 'firebase/auth';
+import { auth, googleProvider } from '../lib/firebase';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -67,30 +69,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Real Google OAuth trigger
+  // Real Firebase Google OAuth trigger
   const handleInitiateGoogleOAuth = async () => {
     try {
       setIsOAuthConnecting(true);
-      const res = await fetch('/api/auth/url');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          const authPopup = window.open(data.url, 'google_oauth_popup', 'width=600,height=700,status=yes,scrollbars=yes');
-          if (!authPopup) {
-            // Fallback if popups are blocked
-            onLoginWithGoogle();
-            setIsOAuthConnecting(false);
-          }
-        } else {
-          onLoginWithGoogle();
-          setIsOAuthConnecting(false);
-        }
-      } else {
-        onLoginWithGoogle();
-        setIsOAuthConnecting(false);
-      }
-    } catch {
+      await signInWithPopup(auth, googleProvider);
       onLoginWithGoogle();
+    } catch (err: any) {
+      console.error('Firebase Auth error:', err);
+      // Fallback
+      onLoginWithGoogle();
+    } finally {
       setIsOAuthConnecting(false);
     }
   };
@@ -506,7 +495,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             {/* Logout Action */}
             <div className="pt-2 flex gap-3">
               <button
-                onClick={onLogout}
+                onClick={async () => {
+                  try {
+                    await signOut(auth);
+                  } catch (e) {
+                    console.error(e);
+                  }
+                  onLogout();
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-rose-200 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
               >
                 <span className="material-symbols-outlined text-base">logout</span>
