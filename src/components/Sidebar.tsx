@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { ViewTab, ThemeMode } from '../types';
 
 interface SidebarProps {
@@ -24,6 +25,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
+  // Auto-collapse on mouse leave setting state
+  const [autoCollapseOnLeave, setAutoCollapseOnLeave] = useState<boolean>(false);
+  const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Custom draggable width state
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
+  const isDraggingRef = useRef<boolean>(false);
 
   const navItems: { id: ViewTab; label: string; icon: string }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -43,6 +51,67 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onCloseMobile();
   };
 
+  // Mouse leave / enter handlers for auto-collapse option
+  const handleMouseEnter = () => {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (autoCollapseOnLeave && !isCollapsed && !isMobileOpen) {
+      leaveTimerRef.current = setTimeout(() => {
+        onToggleCollapse();
+      }, 500);
+    }
+  };
+
+  // Drag handle width resizer
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const newWidth = Math.max(76, Math.min(420, moveEvent.clientX));
+      if (newWidth < 120) {
+        if (!isCollapsed) onToggleCollapse();
+        setSidebarWidth(null);
+      } else {
+        if (isCollapsed) onToggleCollapse();
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    };
+  }, []);
+
+  // Compute computed inline width
+  const effectiveWidth = isCollapsed
+    ? '80px'
+    : sidebarWidth
+    ? `${sidebarWidth}px`
+    : '256px';
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -53,10 +122,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Sidebar Container with smooth Tailwind transitions */}
+      {/* Sidebar Container with smooth Tailwind & width transitions */}
       <aside
-        style={{ willChange: 'width' }}
-        className={`sidebar-container fixed md:sticky top-0 left-0 h-screen flex flex-col z-50 transition-all duration-300 ease-in-out border-r shrink-0 flex-shrink-0 will-change-[width] ${
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{
+          width: window.innerWidth >= 768 ? effectiveWidth : undefined,
+          willChange: 'width',
+        }}
+        className={`sidebar-container fixed md:sticky top-0 left-0 h-screen flex flex-col z-50 transition-all duration-300 ease-in-out border-r shrink-0 flex-shrink-0 will-change-[width] relative ${
           isCollapsed ? 'w-64 md:w-20 p-3' : 'w-64 md:w-64 p-5'
         } ${
           theme === 'dark'
@@ -64,6 +138,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : 'bg-white border-slate-200 text-slate-900 shadow-xs'
         } ${isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}
       >
+        {/* Right Drag Handle for manual width adjustment */}
+        <div
+          onMouseDown={handleMouseDownResize}
+          className="hidden md:flex absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/50 active:bg-blue-600 transition-colors z-50 group items-center justify-center select-none"
+          title="Drag edge to resize sidebar width"
+        >
+          <div className="w-0.5 h-10 bg-slate-300 dark:bg-slate-600 group-hover:bg-blue-400 group-hover:h-16 rounded-full transition-all" />
+        </div>
+
         {/* Header Logo & Brand */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} mb-6 relative`}>
           <div
@@ -97,12 +180,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation Items List */}
+        {/* Navigation Items List with Staggered Framer Motion Animations */}
         <nav className="flex-1 space-y-1.5 overflow-y-auto custom-scrollbar pr-0.5">
-          {navItems.map((item) => {
+          {navItems.map((item, idx) => {
             const isActive = activeTab === item.id;
             return (
-              <div key={item.id} className="relative group">
+              <motion.div
+                key={item.id}
+                initial={false}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: idx * 0.025 }}
+                className="relative group"
+              >
                 <button
                   onClick={() => handleNavClick(item.id)}
                   className={`w-full flex items-center ${
@@ -134,14 +223,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {item.label}
                   </div>
                 )}
-              </div>
+              </motion.div>
             );
           })}
         </nav>
 
-        {/* Bottom Section: Theme Switch, High Speed Badge, & Collapse Toggle Button */}
+        {/* Bottom Section: Auto-collapse toggle, Theme Switch, High Speed Badge, & Collapse Toggle Button */}
         <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-2 mt-auto">
           
+          {/* Auto-collapse on mouse leave setting option */}
+          <div className="relative group">
+            <button
+              onClick={() => setAutoCollapseOnLeave(!autoCollapseOnLeave)}
+              className={`w-full flex items-center ${
+                isCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-1.5'
+              } rounded-xl text-xs font-semibold transition-colors ${
+                autoCollapseOnLeave
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                  : 'bg-slate-100 dark:bg-[#131b2e] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Auto-collapse sidebar when cursor leaves (500ms delay)"
+            >
+              <span className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg">
+                  {autoCollapseOnLeave ? 'auto_mode' : 'mouse'}
+                </span>
+                {!isCollapsed && <span className="text-[11px]">Auto-Collapse</span>}
+              </span>
+              {!isCollapsed && (
+                <span className={`text-[9px] uppercase font-mono px-1.5 py-0.5 rounded font-bold ${
+                  autoCollapseOnLeave ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-gray-300'
+                }`}>
+                  {autoCollapseOnLeave ? 'ON' : 'OFF'}
+                </span>
+              )}
+            </button>
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-700">
+              Auto-collapse on cursor leave (500ms)
+            </div>
+          </div>
+
           {/* Theme Switcher Button */}
           <div className="relative group">
             <button
@@ -217,37 +338,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
 
-          {/* COLLAPSE / EXPAND TOGGLE BUTTON AT THE BOTTOM OF THE SIDEBAR */}
-          <div className="relative group pt-1">
-            <button
-              onClick={onToggleCollapse}
-              className={`w-full flex items-center ${
-                isCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
-              } rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#131b2e] dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-gray-300 text-xs font-bold transition-all shadow-xs`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg">
-                  {isCollapsed ? 'panel_left_open' : 'panel_left_close'}
-                </span>
-                {!isCollapsed && <span>Collapse Sidebar</span>}
-              </div>
-              {!isCollapsed && (
-                <span className="material-symbols-outlined text-sm text-slate-400">
-                  chevron_left
-                </span>
-              )}
-            </button>
-
-            {/* Tooltip when collapsed */}
-            {isCollapsed && (
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 border border-slate-700">
-                Expand Sidebar
-              </div>
-            )}
-          </div>
-
         </div>
       </aside>
     </>
   );
 };
+

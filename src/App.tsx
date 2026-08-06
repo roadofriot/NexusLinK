@@ -18,6 +18,7 @@ import { ScreenUnlockModal } from './components/ScreenUnlockModal';
 import { ProUpgradeModal } from './components/ProUpgradeModal';
 import { CommandPaletteModal } from './components/CommandPaletteModal';
 import { UserProfileModal } from './components/UserProfileModal';
+import { GeminiCopilotModal } from './components/GeminiCopilotModal';
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -47,6 +48,7 @@ export default function App() {
   // Modals
   const [unlockDeviceModal, setUnlockDeviceModal] = useState<Device | null>(null);
   const [isProModalOpen, setIsProModalOpen] = useState<boolean>(false);
+  const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
   // Sidebar collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
@@ -242,6 +244,7 @@ export default function App() {
           onOpenNewSession={() => setActiveTab('connections')}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           onOpenUserProfile={() => setIsProfileModalOpen(true)}
+          onOpenCopilot={() => setIsCopilotOpen(true)}
           user={userProfile}
           theme={theme}
         />
@@ -348,6 +351,13 @@ export default function App() {
         onSelectTab={setActiveTab}
         onSelectDeviceForMirror={handleSelectDeviceForMirror}
         onConnectPartnerId={handleConnectPartnerId}
+      />
+
+      {/* Gemini AI Copilot Chatbot Modal */}
+      <GeminiCopilotModal
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+        theme={theme}
       />
     </div>
   );

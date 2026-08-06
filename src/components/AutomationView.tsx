@@ -83,6 +83,35 @@ export const AutomationView: React.FC<AutomationViewProps> = ({ devices }) => {
   const [newTaskTrigger, setNewTaskTrigger] = useState<AutomationTask['trigger']>('Schedule');
   const [newTaskAction, setNewTaskAction] = useState<AutomationTask['actionType']>('Run Script');
 
+  // Gemini AI Script Generator State
+  const [aiInstruction, setAiInstruction] = useState('');
+  const [generatedScript, setGeneratedScript] = useState<string | null>(null);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+
+  const handleGenerateScriptWithGemini = async () => {
+    if (!aiInstruction.trim()) return;
+    setIsGeneratingScript(true);
+    setGeneratedScript(null);
+    try {
+      const res = await fetch('/api/gemini/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction: aiInstruction,
+          deviceType: selectedTargetDevice,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate script');
+      setGeneratedScript(data.script || 'No script generated.');
+    } catch (err: any) {
+      console.error('Gemini Script Gen Error:', err);
+      setGeneratedScript(`Error generating script: ${err.message}`);
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
   const handleToggleTaskStatus = (id: string) => {
     setTasks((prev) =>
       prev.map((t) =>
@@ -257,6 +286,64 @@ export const AutomationView: React.FC<AutomationViewProps> = ({ devices }) => {
           transition={{ duration: 0.25 }}
           className="space-y-6"
         >
+          {/* Gemini AI Script Generator Widget */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/30 p-6 rounded-2xl shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-gradient-to-tr from-purple-500 to-indigo-500 text-white shadow-sm">
+                  <span className="material-symbols-outlined text-xl">auto_awesome</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white flex items-center gap-2">
+                    Gemini AI Automation Script Generator
+                    <span className="px-2 py-0.5 text-[10px] uppercase font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
+                      AI Powered
+                    </span>
+                  </h3>
+                  <p className="text-xs text-indigo-200/80">
+                    Type plain English instructions to generate optimized ADB shell commands & macro sequences.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={aiInstruction}
+                onChange={(e) => setAiInstruction(e.target.value)}
+                placeholder="e.g., Take screenshot every 5 mins, clear browser cache, and reboot if memory > 80%"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-white placeholder-indigo-200/50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+              />
+              <button
+                onClick={handleGenerateScriptWithGemini}
+                disabled={!aiInstruction.trim() || isGeneratingScript}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shrink-0"
+              >
+                <span className="material-symbols-outlined text-base">sparkles</span>
+                {isGeneratingScript ? 'Generating...' : 'Generate Script'}
+              </button>
+            </div>
+
+            {generatedScript && (
+              <div className="p-4 rounded-xl bg-black/40 border border-white/10 font-mono text-xs text-emerald-300 space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between text-indigo-300 font-sans text-xs font-bold border-b border-white/10 pb-2">
+                  <span>Generated ADB Shell Sequence:</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedScript);
+                      alert('Script copied to clipboard!');
+                    }}
+                    className="text-[10px] text-indigo-300 hover:text-white uppercase font-mono bg-white/10 px-2 py-0.5 rounded"
+                  >
+                    Copy Script
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap font-mono leading-relaxed">{generatedScript}</pre>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-sm text-gray-900 dark:text-white">Active Automation Schedules & Trigger Rules</h3>
             <button

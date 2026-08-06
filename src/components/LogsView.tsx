@@ -7,6 +7,8 @@ interface LogsViewProps {
 
 export const LogsView: React.FC<LogsViewProps> = ({ selectedDevice }) => {
   const [filterLevel, setFilterLevel] = useState<'ALL' | 'INFO' | 'WARN' | 'SECURITY'>('ALL');
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   
   const [logs] = useState<LogEntry[]>([
     {
@@ -50,6 +52,30 @@ export const LogsView: React.FC<LogsViewProps> = ({ selectedDevice }) => {
       deviceId: selectedDevice.id,
     },
   ]);
+
+  const handleAnalyzeWithGemini = async () => {
+    setIsAnalyzing(true);
+    setAiAnalysis(null);
+    try {
+      const formattedLogs = logs.map(l => `[${l.timestamp}] [${l.level}] [${l.source}] ${l.message}`).join('\n');
+      const res = await fetch('/api/gemini/analyze-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logs: formattedLogs,
+          deviceName: selectedDevice.name,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to analyze logs');
+      setAiAnalysis(data.analysis || 'Analysis complete.');
+    } catch (err: any) {
+      console.error('AI Log Analysis error:', err);
+      setAiAnalysis(`Failed to generate AI diagnostic report: ${err.message}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const filteredLogs = logs.filter((l) => (filterLevel === 'ALL' ? true : l.level === filterLevel));
 
@@ -113,7 +139,18 @@ export const LogsView: React.FC<LogsViewProps> = ({ selectedDevice }) => {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleAnalyzeWithGemini}
+              disabled={isAnalyzing}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-sm">sparkles</span>
+              <span>{isAnalyzing ? 'Analyzing with Gemini...' : 'Analyze Logs with AI'}</span>
+            </button>
+
+            <div className="h-4 w-px bg-gray-200 dark:bg-white/10 hidden sm:block" />
+
             {(['ALL', 'INFO', 'WARN', 'SECURITY'] as const).map((lvl) => (
               <button
                 key={lvl}
@@ -129,6 +166,27 @@ export const LogsView: React.FC<LogsViewProps> = ({ selectedDevice }) => {
             ))}
           </div>
         </div>
+
+        {/* Gemini AI Diagnostic Report Box */}
+        {aiAnalysis && (
+          <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-950/80 via-purple-950/60 to-slate-900 text-slate-100 border border-indigo-500/30 shadow-md animate-fadeIn">
+            <div className="flex items-center justify-between pb-2 border-b border-indigo-500/20 mb-3">
+              <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs uppercase tracking-wider">
+                <span className="material-symbols-outlined text-base text-purple-400">auto_awesome</span>
+                Gemini AI Security & Diagnostic Report
+              </div>
+              <button
+                onClick={() => setAiAnalysis(null)}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                Dismiss
+              </button>
+            </div>
+            <div className="text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-200">
+              {aiAnalysis}
+            </div>
+          </div>
+        )}
 
         {/* Logs Console Container */}
         <div className="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-xl p-4 font-mono text-xs space-y-2 max-h-96 overflow-y-auto custom-scrollbar border border-gray-200 dark:border-gray-800">

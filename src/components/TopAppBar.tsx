@@ -9,6 +9,7 @@ interface TopAppBarProps {
   onOpenNewSession: () => void;
   onOpenCommandPalette: () => void;
   onOpenUserProfile: () => void;
+  onOpenCopilot?: () => void;
   user: UserProfile | null;
   theme: ThemeMode;
 }
@@ -21,6 +22,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   onOpenNewSession,
   onOpenCommandPalette,
   onOpenUserProfile,
+  onOpenCopilot,
   user,
   theme,
 }) => {
@@ -109,7 +111,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           title={isSidebarCollapsed ? "Expand Left Panel (Ctrl+B)" : "Collapse Left Panel (Ctrl+B)"}
         >
           <span className="material-symbols-outlined text-xl">
-            {isSidebarCollapsed ? 'panel_left_open' : 'panel_left'}
+            {isSidebarCollapsed ? 'view_sidebar' : 'menu_open'}
           </span>
         </button>
 
@@ -151,6 +153,18 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         </div>
 
         <div className="h-6 w-px bg-gray-200 dark:bg-white/10 hidden sm:block"></div>
+
+        {/* Gemini AI Copilot Trigger */}
+        {onOpenCopilot && (
+          <button
+            onClick={onOpenCopilot}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white text-xs font-bold transition-all shadow-xs"
+            title="Open Gemini AI Copilot Chatbot"
+          >
+            <span className="material-symbols-outlined text-sm">sparkles</span>
+            <span className="hidden sm:inline">AI Copilot</span>
+          </button>
+        )}
 
         {/* Command Palette Trigger */}
         <button

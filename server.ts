@@ -1,6 +1,17 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI } from '@google/genai';
+
+// Initialize Gemini Client
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    },
+  },
+});
 
 async function startServer() {
   const app = express();
@@ -115,6 +126,91 @@ async function startServer() {
   app.post('/api/auth/logout', (req, res) => {
     sessionUser.isLoggedIn = false;
     res.json({ success: true });
+  });
+
+  // GEMINI AI INTEGRATION ROUTES
+
+  // 1. Multi-turn AI Chatbot / Copilot route
+  app.post('/api/gemini/chat', async (req, res) => {
+    try {
+      const { messages, systemInstruction } = req.body;
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ error: 'Messages array is required' });
+      }
+
+      const contents = messages.map((m: any) => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content || m.text || '' }],
+      }));
+
+      const defaultSysInst = `You are MindSparQ AI Copilot, an advanced AI technical assistant for Android remote administration, ADB debugging, device security, logcat analysis, and automated workflows.
+Answer questions directly, accurately, and concisely. Provide actionable step-by-step commands or insights when relevant. Keep tone professional, technical, and helpful.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents,
+        config: {
+          systemInstruction: systemInstruction || defaultSysInst,
+        },
+      });
+
+      res.json({ text: response.text || 'No response generated.' });
+    } catch (error: any) {
+      console.error('Gemini Chat API Error:', error);
+      res.status(500).json({ error: error.message || 'Failed to process chat request' });
+    }
+  });
+
+  // 2. AI Device Security & Logcat Analyzer
+  app.post('/api/gemini/analyze-logs', async (req, res) => {
+    try {
+      const { logs, deviceName } = req.body;
+      const prompt = `Analyze these system logs from device "${deviceName || 'Connected Device'}":
+
+${logs || 'No log data provided.'}
+
+Provide a structured breakdown including:
+1. Executive Security & Performance Summary
+2. Key Anomalies or Warnings Detected
+3. Recommended Remediation Commands (ADB or shell scripts)`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt,
+        config: {
+          systemInstruction: 'You are an expert mobile device security engineer and Android logcat diagnostician.',
+        },
+      });
+
+      res.json({ analysis: response.text || 'Analysis empty.' });
+    } catch (error: any) {
+      console.error('Gemini Log Analysis Error:', error);
+      res.status(500).json({ error: error.message || 'Failed to analyze logs' });
+    }
+  });
+
+  // 3. AI Automation Script Generator
+  app.post('/api/gemini/generate-script', async (req, res) => {
+    try {
+      const { instruction, deviceType } = req.body;
+      const prompt = `Generate an ADB shell or automation script for the following requirement on an ${deviceType || 'Android'} device:
+"${instruction}"
+
+Provide:
+1. Shell / ADB command sequence
+2. Explanation of what each step does
+3. Any necessary permission grants or safety considerations`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt,
+      });
+
+      res.json({ script: response.text || 'No script generated.' });
+    } catch (error: any) {
+      console.error('Gemini Script Gen Error:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate script' });
+    }
   });
 
   // Vite Middleware in Development
